@@ -95,10 +95,9 @@ st.markdown(f"🕐 **Hora Argentina:** {current_time_arg.strftime('%H:%M:%S - %d
 if "data" not in st.session_state:
     hist = load_historical_data(15)
     if not hist.empty:
-        # Convertir timestamps a hora argentina
+        # FIX: Usar format='ISO8601' para parsear timestamps ISO
         timestamps_arg = (
-            pd.to_datetime(hist.timestamp)
-              .dt.tz_localize('UTC')
+            pd.to_datetime(hist.timestamp, format='ISO8601')
               .dt.tz_convert(ARGENTINA_TZ)
         )
         st.session_state["data"] = pd.DataFrame({
@@ -188,11 +187,36 @@ except Exception as e:
 
 data = st.session_state["data"]
 
-# --- SOLO SE MODIFICÓ ESTA LÍNEA PARA EVITAR EL ERROR Tz-aware ---
-data["timestamp"] = pd.to_datetime(data["timestamp"], utc=True) \
-                    .dt.tz_convert(ARGENTINA_TZ) \
-                    .dt.tz_localize(None)
-# ---------------------------------------------------------------
+# FIX: Manejo robusto de timestamps mixtos (con y sin timezone)
+if not data.empty and len(data) > 0:
+    def normalize_timestamp(ts):
+        """Normaliza timestamps a datetime sin timezone en hora Argentina"""
+        if pd.isna(ts):
+            return ts
+        
+        # Si ya es datetime con timezone
+        if hasattr(ts, 'tz') and ts.tz is not None:
+            return ts.astimezone(ARGENTINA_TZ).replace(tzinfo=None)
+        
+        # Si ya es datetime sin timezone, asumir que está en hora Argentina
+        if isinstance(ts, datetime):
+            return ts.replace(tzinfo=None)
+        
+        # Si es string, parsearlo
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                if dt.tzinfo is not None:
+                    return dt.astimezone(ARGENTINA_TZ).replace(tzinfo=None)
+                else:
+                    return dt
+            except:
+                return pd.to_datetime(ts, utc=True).tz_convert(ARGENTINA_TZ).tz_localize(None)
+        
+        return ts
+    
+    # Aplicar normalización a todos los timestamps
+    data["timestamp"] = data["timestamp"].apply(normalize_timestamp)
 
 if not data.empty:
     # recalculo
