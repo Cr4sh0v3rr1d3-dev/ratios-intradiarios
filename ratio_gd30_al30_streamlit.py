@@ -219,6 +219,9 @@ if not data.empty and len(data) > 0:
     data["timestamp"] = data["timestamp"].apply(normalize_timestamp)
 
 if not data.empty:
+    # ORDENAR datos por timestamp antes de calcular bandas y graficar
+    data = data.sort_values('timestamp').reset_index(drop=True)
+    
     # recalculo
     w2 = max(1, min(180, len(data)))
     data["MM180"]     = data["Ratio"].rolling(window=w2, min_periods=1).mean()
